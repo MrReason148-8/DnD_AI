@@ -214,6 +214,14 @@ bot.on('callback_query', async (ctx) => {
 
     if (actionText) {
         await ctx.answerCbQuery();
+
+        // Удаляем кнопки у текущего сообщения, чтобы нельзя было нажать дважды
+        try {
+            await ctx.editMessageReplyMarkup(null);
+        } catch (e) {
+            console.error('Failed to remove keyboard:', e);
+        }
+
         await handleGameTurn(ctx, player, `Игрок выбрал: ${actionText}`);
     }
 });
