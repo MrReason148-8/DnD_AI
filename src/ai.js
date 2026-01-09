@@ -10,12 +10,16 @@ class DeepSeekAI {
 
     async generateResponse(player, userMessage) {
         const systemPrompt = `Ты Гейм-мастер в стиле D&D. 
-Игрок: ${player.name}, ${player.age} лет. 
+Игрок: ${player.name}, ${player.age} лет, класс: ${player.stats.class}. 
 Описывай мир атмосферно, но лаконично. 
-В конце КАЖДОГО ответа ты ОБЯЗАН предложить 3 варианта действий в строгом формате:
-ACTION1: [Текст действия]
-ACTION2: [Текст действия]
-ACTION3: [Текст действия]`;
+В конце КАЖДОГО ответа ты ОБЯЗАН:
+1. Предложить 3 варианта действий в формате:
+ACTION1: [Текст]
+ACTION2: [Текст]
+ACTION3: [Текст]
+2. ЕСЛИ произошло изменение состояния (урон, опыт, новые вещи), добавь скрытую строку:
+CHANGES: {"hp": -10, "xp": 20, "get": "Ржавый меч"}
+(если изменений нет, строку Changes писать не нужно).`;
 
         const messages = [
             { role: 'system', content: systemPrompt },
@@ -52,6 +56,19 @@ ACTION3: [Текст действия]`;
 
         // Если ИИ не выдал кнопки (редко, но бывает), вернем пустой массив или дефолт
         return actions;
+    }
+
+    parseChanges(text) {
+        const changesRegex = /CHANGES:\s*({.*?})/;
+        const match = text.match(changesRegex);
+        if (match) {
+            try {
+                return JSON.parse(match[1]);
+            } catch (err) {
+                console.error('❌ Failed to parse CHANGES JSON:', err);
+            }
+        }
+        return null;
     }
 }
 

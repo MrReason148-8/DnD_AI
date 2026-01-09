@@ -41,24 +41,54 @@ const registrationWizard = new Scenes.WizardScene(
             return ctx.reply('Возраст должен быть числом. Попробуй еще раз.');
         }
 
+        ctx.scene.state.age = age;
+
+        await ctx.reply('Выбери свой класс:', Markup.inlineKeyboard([
+            [Markup.button.callback('Воин 🛡️', 'class_warrior')],
+            [Markup.button.callback('Маг 🧙', 'class_mage')],
+            [Markup.button.callback('Вор 🗡️', 'class_rogue')]
+        ]));
+        return ctx.wizard.next();
+    },
+    async (ctx) => {
+        if (!ctx.callbackQuery) {
+            return ctx.reply('Пожалуйста, выбери класс, нажав на кнопку.');
+        }
+
+        const classMap = {
+            class_warrior: 'Воин',
+            class_mage: 'Маг',
+            class_rogue: 'Вор'
+        };
+
+        const selectedClass = classMap[ctx.callbackQuery.data];
+        const { name, age } = ctx.scene.state;
         const chatId = ctx.from.id;
-        const name = ctx.scene.state.name;
 
         // Сохраняем игрока в локальную БД
         let player = await playersDB.findOne({ chatId });
+        const initialStats = {
+            hp: 100,
+            xp: 0,
+            level: 1,
+            class: selectedClass,
+            inventory: []
+        };
+
         if (!player) {
-            player = { chatId, name, age, history: [], stats: { hp: 100, xp: 0, level: 1 } };
+            player = { chatId, name, age, history: [], stats: initialStats };
             await playersDB.insert(player);
         } else {
             player.name = name;
             player.age = age;
-            player.history = []; // Сбрасываем историю при новой регистрации
+            player.stats = initialStats;
+            player.history = [];
             await playersDB.update({ chatId }, player);
         }
 
-        await ctx.reply(`Персонаж ${name} (${age} лет) готов к приключениям! Начинаем историю...`);
+        await ctx.answerCbQuery();
+        await ctx.reply(`Персонаж ${name} (${selectedClass}, ${age} лет) готов! Начинаем историю...`);
 
-        // Первая генерация сюжета
         await handleGameTurn(ctx, player, 'Начни историю моего приключения в темном фэнтези мире.');
 
         return ctx.scene.leave();
@@ -79,8 +109,36 @@ async function handleGameTurn(ctx, player, userText) {
     try {
         const aiResponse = await ai.generateResponse(player, userText);
         const actions = ai.parseActions(aiResponse);
+        const changes = ai.parseChanges(aiResponse);
 
-        const cleanText = aiResponse.replace(/ACTION\d:.*?\n?/g, '').trim();
+        // Очищаем текст от служебных тегов
+        const cleanText = aiResponse
+            .replace(/ACTION\d:.*?\n?/g, '')
+            .replace(/CHANGES:.*?\n?/g, '')
+            .trim();
+
+        // Применяем изменения, если они есть
+        let statusMsg = '';
+        if (changes) {
+            if (changes.hp) {
+                player.stats.hp = Math.max(0, Math.min(100, player.stats.hp + changes.hp));
+                statusMsg += changes.hp > 0 ? `\n❤️ +${changes.hp} HP` : `\n💔 ${changes.hp} HP`;
+            }
+            if (changes.xp) {
+                player.stats.xp += changes.xp;
+                statusMsg += `\n⭐ +${changes.xp} XP`;
+                // Простая логика уровней (каждые 100 XP)
+                const nextLevel = Math.floor(player.stats.xp / 100) + 1;
+                if (nextLevel > player.stats.level) {
+                    player.stats.level = nextLevel;
+                    statusMsg += `\n🎊 **УРОВЕНЬ ПОВЫШЕН: ${nextLevel}!**`;
+                }
+            }
+            if (changes.get) {
+                player.stats.inventory.push(changes.get);
+                statusMsg += `\n🎒 Получено: ${changes.get}`;
+            }
+        }
 
         // Обновляем историю
         player.history.push({ role: 'user', content: userText });
@@ -96,10 +154,12 @@ async function handleGameTurn(ctx, player, userText) {
             ? Markup.inlineKeyboard(actions.map(a => [Markup.button.callback(a.text, a.id)]))
             : null;
 
+        const finalMessage = statusMsg ? `${cleanText}\n\n*${statusMsg.trim()}*` : cleanText;
+
         if (keyboard) {
-            await ctx.reply(cleanText, keyboard);
+            await ctx.replyWithMarkdown(finalMessage, keyboard);
         } else {
-            await ctx.reply(cleanText);
+            await ctx.replyWithMarkdown(finalMessage);
         }
     } catch (err) {
         console.error('AI Game Turn Error:', err);
@@ -108,6 +168,21 @@ async function handleGameTurn(ctx, player, userText) {
 }
 
 // --- Обработчики ---
+
+bot.command('stats', async (ctx) => {
+    const player = await playersDB.findOne({ chatId: ctx.from.id });
+    if (!player) return ctx.reply('Сначала зарегистрируйся: /start');
+
+    const { stats, name } = player;
+    const msg = `👤 **Профиль героя: ${name}**\n\n` +
+        `🎭 Класс: ${stats.class}\n` +
+        `❤️ HP: ${stats.hp}/100\n` +
+        `⭐ Уровень: ${stats.level}\n` +
+        `📈 Опыт: ${stats.xp}\n` +
+        `🎒 Инвентарь: ${stats.inventory.length > 0 ? stats.inventory.join(', ') : 'Пусто'}`;
+
+    await ctx.replyWithMarkdown(msg);
+});
 
 bot.command('start', (ctx) => {
     ctx.scene.enter('REGISTRATION_SCENE');
