@@ -196,7 +196,14 @@ async function handleGameTurn(ctx, player, userText) {
         // 2. Отправляем блок кубика, если он есть
         if (diceContent) {
             await ctx.sendChatAction('typing');
-            await new Promise(r => setTimeout(r, 1000));
+
+            // Отправляем анимированный кубик
+            const animDice = await ctx.reply('🎲');
+            sentMsgIds.push(animDice.message_id);
+
+            // Ждем, пока анимация проиграется (около 3 секунд)
+            await new Promise(r => setTimeout(r, 3500));
+
             const diceMsg = await ctx.replyWithMarkdown(`${t.dice_header}\n\n_${diceContent}_`);
             sentMsgIds.push(diceMsg.message_id);
         }
