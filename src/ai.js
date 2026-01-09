@@ -11,7 +11,10 @@ class DeepSeekAI {
     async generateResponse(player, userMessage) {
         const spellsStr = (player.stats.spells && player.stats.spells.length > 0) ? player.stats.spells.join(', ') : 'пока нет';
         const notesStr = (player.stats.notes && player.stats.notes.length > 0) ? player.stats.notes.join('\n- ') : 'пока пусто';
+        const lang = player.stats.language || 'ru';
+
         const systemPrompt = `Ты — Мастер Подземелий (Game Master) мирового уровня. Твоя цель: создать незабываемое, глубокое и эмоциональное приключение.
+ЯЗЫК ИГРЫ: ${lang === 'ru' ? 'Русский' : 'English'}. Отвечай СТРОГО на этом языке.
 
 Данные игрока:
 - Имя: ${player.name} (${player.stats.gender})
@@ -25,15 +28,16 @@ ${notesStr}
 2. ВНУТРЕННИЕ КУБИКИ: Для каждого сложного действия игрока ты должен «бросить d20» в уме. Описывай результат художественно.
 3. ЕДИНСТВО МИРА: Помни всё, что было раньше. Отношение NPC зависит от прошлых поступков игрока.
 4. ЗАПИСЬ СОБЫТИЙ: Если произошло что-то важное (новая репутация, герой кому-то насолил или помог), ОБЯЗАТЕЛЬНО добавь это в CHANGES в поле "note".
+5. ЯЗЫК: Веди всё повествование и предлагай варианты ACTION только на языке пользователя (${lang}).`;
 
----
-ACTION1: [Текст до 25 симв. + эмодзи]
-ACTION2: [Текст до 25 симв. + эмодзи]
-ACTION3: [Текст до 25 симв. + эмодзи]
-CHANGES: {"hp": -10, "xp": 20, "learn": "Заклинание", "get": "Предмет", "note": "Краткая запись события"}
----
+        ---
+            ACTION1: [Текст до 25 симв. + эмодзи]
+        ACTION2: [Текст до 25 симв. + эмодзи]
+        ACTION3: [Текст до 25 симв. + эмодзи]
+        CHANGES: { "hp": -10, "xp": 20, "learn": "Заклинание", "get": "Предмет", "note": "Краткая запись события" }
+        ---
 
-ВАЖНО: Кнопки ACTION должны предлагать варианты, основанные на способностях игрока (${spellsStr}). CHANGES пиши только при реальных переменах.`;
+            ВАЖНО: Кнопки ACTION должны предлагать варианты, основанные на способностях игрока(${ spellsStr }).CHANGES пиши только при реальных переменах.`;
 
         const messages = [
             { role: 'system', content: systemPrompt },
@@ -66,7 +70,7 @@ CHANGES: {"hp": -10, "xp": 20, "learn": "Заклинание", "get": "Пред
             const actionText = match[2].trim();
             if (actionText) {
                 actions.push({
-                    id: `action_${match[1]}`,
+                    id: `action_${ match[1] } `,
                     text: actionText
                 });
             }
