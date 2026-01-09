@@ -43,18 +43,20 @@ CHANGES: {"hp": -10, "xp": 20, "get": "Ржавый меч"}
     }
 
     parseActions(text) {
-        const actionRegex = /ACTION(\d):\s*\[(.*?)\]/g;
+        // Ищем ACTION1: [Текст] или ACTION1: Текст
+        const actionRegex = /ACTION(\d):\s*(?:\[)?(.*?)(?:\])?(?:\n|$)/g;
         const actions = [];
         let match;
 
         while ((match = actionRegex.exec(text)) !== null) {
-            actions.push({
-                id: `action_${match[1]}`,
-                text: match[2].trim()
-            });
+            const actionText = match[2].trim();
+            if (actionText) {
+                actions.push({
+                    id: `action_${match[1]}`,
+                    text: actionText
+                });
+            }
         }
-
-        // Если ИИ не выдал кнопки (редко, но бывает), вернем пустой массив или дефолт
         return actions;
     }
 
