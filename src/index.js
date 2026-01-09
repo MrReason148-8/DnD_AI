@@ -312,12 +312,52 @@ bot.on('callback_query', async (ctx) => {
     const chatId = ctx.from.id;
     const player = await playersDB.findOne({ chatId });
 
+    const lang = player ? player.stats.language : 'ru';
+    const t = i18n[lang];
+
+    // Шаг 1: Запрос подтверждения удаления
     if (ctx.callbackQuery.data === 'delete_game') {
-        const lang = player ? player.stats.language : 'ru';
+        await ctx.answerCbQuery();
+        // Отправляем сообщение-подтверждение
+        const warnMsg = await ctx.replyWithMarkdown(t.delete_warn, Markup.inlineKeyboard([
+            [Markup.button.callback(t.delete_yes, 'confirm_delete_final')],
+            [Markup.button.callback(t.delete_no, 'cancel_delete_final')]
+        ]));
+
+        // Добавляем ID в список для возможного удаления (если вдруг нажмут Отмена, а потом Стереть снова)
+        if (player) {
+            if (!player.stats.lastTurnMsgIds) player.stats.lastTurnMsgIds = [];
+            player.stats.lastTurnMsgIds.push(warnMsg.message_id);
+            await playersDB.update({ chatId }, player);
+        }
+        return;
+    }
+
+    // Шаг 2: Окончательное удаление
+    if (ctx.callbackQuery.data === 'confirm_delete_final') {
+        // Удаляем все сообщения предыдущего хода (и само подтверждение)
+        try {
+            if (player && player.stats.lastTurnMsgIds) {
+                for (const msgId of player.stats.lastTurnMsgIds) {
+                    await ctx.telegram.deleteMessage(ctx.chat.id, msgId).catch(() => { });
+                }
+            }
+            await ctx.deleteMessage().catch(() => { }); // Удаляем сообщение с кнопками подтверждения
+        } catch (e) { }
+
         await playersDB.remove({ chatId }, { multi: false });
         await sessionsDB.remove({ key: `${ctx.from.id}:${ctx.chat.id}` }, { multi: false });
         await ctx.answerCbQuery();
-        return ctx.reply(i18n[lang].delete_confirm);
+        return ctx.reply(t.delete_confirm);
+    }
+
+    // Шаг 3: Отмена удаления
+    if (ctx.callbackQuery.data === 'cancel_delete_final') {
+        try {
+            await ctx.deleteMessage().catch(() => { }); // Просто удаляем сообщение-варнинг
+        } catch (e) { }
+        await ctx.answerCbQuery();
+        return;
     }
 
     if (!player) return;
