@@ -10,8 +10,9 @@ class DeepSeekAI {
 
     async generateResponse(player, userMessage) {
         const systemPrompt = `Ты Гейм-мастер в стиле D&D. 
-Игрок: ${player.name}, ${player.age} лет, класс: ${player.stats.class}. 
+Игрок: ${player.name}, ${player.age} лет, пол: ${player.stats.gender}, класс: ${player.stats.class}. 
 Описывай мир атмосферно, но лаконично. 
+ВАЖНО: Всегда используй правильные грамматические формы (роды, окончания), соответствующие полу героя (${player.stats.gender}).
 В конце КАЖДОГО ответа ты ОБЯЗАН вывести технический блок (он будет вырезан ботом, поэтому не смешивай его с текстом истории):
 
 ---

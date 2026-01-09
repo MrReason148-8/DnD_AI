@@ -43,6 +43,19 @@ const registrationWizard = new Scenes.WizardScene(
 
         ctx.scene.state.age = age;
 
+        await ctx.reply('Выбери пол своего героя:', Markup.inlineKeyboard([
+            [Markup.button.callback('Мужской 🧔', 'gender_male')],
+            [Markup.button.callback('Женский 👩', 'gender_female')]
+        ]));
+        return ctx.wizard.next();
+    },
+    async (ctx) => {
+        if (!ctx.callbackQuery || !ctx.callbackQuery.data.startsWith('gender_')) {
+            return ctx.reply('Пожалуйста, выбери пол, нажав на кнопку.');
+        }
+        ctx.scene.state.gender = ctx.callbackQuery.data === 'gender_male' ? 'мужской' : 'женский';
+        await ctx.answerCbQuery();
+
         await ctx.reply('Выбери свой класс:', Markup.inlineKeyboard([
             [Markup.button.callback('Воин 🛡️', 'class_warrior')],
             [Markup.button.callback('Маг 🧙', 'class_mage')],
@@ -51,7 +64,7 @@ const registrationWizard = new Scenes.WizardScene(
         return ctx.wizard.next();
     },
     async (ctx) => {
-        if (!ctx.callbackQuery) {
+        if (!ctx.callbackQuery || !ctx.callbackQuery.data.startsWith('class_')) {
             return ctx.reply('Пожалуйста, выбери класс, нажав на кнопку.');
         }
 
@@ -62,7 +75,7 @@ const registrationWizard = new Scenes.WizardScene(
         };
 
         const selectedClass = classMap[ctx.callbackQuery.data];
-        const { name, age } = ctx.scene.state;
+        const { name, age, gender } = ctx.scene.state;
         const chatId = ctx.from.id;
 
         // Сохраняем игрока в локальную БД
@@ -72,6 +85,7 @@ const registrationWizard = new Scenes.WizardScene(
             xp: 0,
             level: 1,
             class: selectedClass,
+            gender: gender,
             inventory: []
         };
 
@@ -87,7 +101,7 @@ const registrationWizard = new Scenes.WizardScene(
         }
 
         await ctx.answerCbQuery();
-        await ctx.reply(`Персонаж ${name} (${selectedClass}, ${age} лет) готов! Начинаем историю...`);
+        await ctx.reply(`Персонаж ${name} (${gender}, ${selectedClass}, ${age} лет) готов! Начинаем историю...`);
 
         await handleGameTurn(ctx, player, 'Начни историю моего приключения в темном фэнтези мире.');
 
@@ -180,7 +194,8 @@ bot.command('stats', async (ctx) => {
 
     const { stats, name } = player;
     const msg = `👤 **Профиль героя: ${name}**\n\n` +
-        `🎭 Класс: ${stats.class}\n` +
+        `🎭 Пол: ${stats.gender}\n` +
+        `⚔️ Класс: ${stats.class}\n` +
         `❤️ HP: ${stats.hp}/100\n` +
         `⭐ Уровень: ${stats.level}\n` +
         `📈 Опыт: ${stats.xp}\n` +
