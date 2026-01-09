@@ -199,11 +199,14 @@ async function handleGameTurn(ctx, player, userText) {
         const paragraphs = mainText.split('\n\n').filter(p => p.trim().length > 0);
         const sentMsgIds = [];
 
+        // Помощник для случайной задержки
+        const sleep = (min, max) => new Promise(r => setTimeout(r, Math.floor(Math.random() * (max - min + 1) + min) * 1000));
+
         // 1. Отправляем абзацы по очереди
         for (let i = 0; i < paragraphs.length; i++) {
             if (i > 0) {
                 await ctx.sendChatAction('typing');
-                await new Promise(r => setTimeout(r, 1500)); // Задержка между абзацами
+                await sleep(1, 4); // Случайная задержка 1-4 сек перед следующим абзацем
             }
             const msg = await ctx.replyWithMarkdown(paragraphs[i].trim());
             sentMsgIds.push(msg.message_id);
@@ -212,13 +215,14 @@ async function handleGameTurn(ctx, player, userText) {
         // 2. Отправляем блок кубика, если он есть
         if (diceContent) {
             await ctx.sendChatAction('typing');
+            await sleep(1, 2);
 
             // Отправляем анимированный кубик
             const animDice = await ctx.reply('🎲');
             sentMsgIds.push(animDice.message_id);
 
-            // Ждем, пока анимация проиграется (около 3 секунд)
-            await new Promise(r => setTimeout(r, 3500));
+            // Ждем, пока анимация проиграется (около 3-4 секунд)
+            await sleep(3, 4);
 
             const diceMsg = await ctx.replyWithMarkdown(`${t.dice_header}\n\n_${diceContent}_`);
             sentMsgIds.push(diceMsg.message_id);
