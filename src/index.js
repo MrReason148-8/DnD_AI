@@ -26,11 +26,15 @@ const registrationWizard = new Scenes.WizardScene(
     'REGISTRATION_SCENE',
     async (ctx) => {
         // Шаг 1: Приветствие и выбор языка
+        ctx.scene.state.msgIds = [];
+        if (ctx.message) ctx.scene.state.msgIds.push(ctx.message.message_id);
+
         const name = ctx.from.first_name || 'Путник';
-        await ctx.reply(`Привет, ${name}! 👋\nВыбери язык для игры / Choose your language:`, Markup.inlineKeyboard([
+        const msg = await ctx.reply(`Привет, ${name}! 👋\nВыбери язык для игры / Choose your language:`, Markup.inlineKeyboard([
             [Markup.button.callback('🇷🇺 Русский', 'lang_ru')],
             [Markup.button.callback('🇺🇸 English', 'lang_en')]
         ]));
+        ctx.scene.state.msgIds.push(msg.message_id);
         return ctx.wizard.next();
     },
     async (ctx) => {
@@ -43,8 +47,9 @@ const registrationWizard = new Scenes.WizardScene(
         const t = i18n[lang];
 
         await ctx.answerCbQuery();
-        await ctx.reply(t.intro);
-        await ctx.reply(t.ask_name);
+        const msg1 = await ctx.reply(t.intro);
+        const msg2 = await ctx.reply(t.ask_name);
+        ctx.scene.state.msgIds.push(msg1.message_id, msg2.message_id);
         return ctx.wizard.next();
     },
     async (ctx) => {
@@ -55,8 +60,10 @@ const registrationWizard = new Scenes.WizardScene(
         if (!ctx.message || !ctx.message.text) {
             return ctx.reply(t.error_name);
         }
+        ctx.scene.state.msgIds.push(ctx.message.message_id);
         ctx.scene.state.name = ctx.message.text;
-        await ctx.reply(t.ask_age);
+        const msg = await ctx.reply(t.ask_age);
+        ctx.scene.state.msgIds.push(msg.message_id);
         return ctx.wizard.next();
     },
     async (ctx) => {
@@ -68,12 +75,14 @@ const registrationWizard = new Scenes.WizardScene(
         if (isNaN(age)) {
             return ctx.reply(t.error_age);
         }
+        ctx.scene.state.msgIds.push(ctx.message.message_id);
         ctx.scene.state.age = age;
 
-        await ctx.reply(t.ask_gender, Markup.inlineKeyboard([
+        const msg = await ctx.reply(t.ask_gender, Markup.inlineKeyboard([
             [Markup.button.callback(t.gender_male, 'gender_male')],
             [Markup.button.callback(t.gender_female, 'gender_female')]
         ]));
+        ctx.scene.state.msgIds.push(msg.message_id);
         return ctx.wizard.next();
     },
     async (ctx) => {
@@ -87,7 +96,8 @@ const registrationWizard = new Scenes.WizardScene(
         ctx.scene.state.gender = ctx.callbackQuery.data === 'gender_male' ? (lang === 'ru' ? 'мужской' : 'male') : (lang === 'ru' ? 'женский' : 'female');
         await ctx.answerCbQuery();
 
-        await ctx.reply(t.ask_background);
+        const msg = await ctx.reply(t.ask_background);
+        ctx.scene.state.msgIds.push(msg.message_id);
         return ctx.wizard.next();
     },
     async (ctx) => {
@@ -98,9 +108,10 @@ const registrationWizard = new Scenes.WizardScene(
         if (!ctx.message || !ctx.message.text) {
             return ctx.reply(t.error_background);
         }
+        ctx.scene.state.msgIds.push(ctx.message.message_id);
 
         const background = ctx.message.text;
-        const { name, age, gender } = ctx.scene.state;
+        const { name, age, gender, msgIds } = ctx.scene.state;
         const chatId = ctx.from.id;
 
         let player = await playersDB.findOne({ chatId });
@@ -113,7 +124,8 @@ const registrationWizard = new Scenes.WizardScene(
             language: lang,
             spells: [],
             notes: [],
-            inventory: []
+            inventory: [],
+            lastTurnMsgIds: msgIds // Передаем ID для удаления первым ходом
         };
 
         if (!player) {
@@ -127,7 +139,11 @@ const registrationWizard = new Scenes.WizardScene(
             await playersDB.update({ chatId }, player);
         }
 
-        await ctx.reply(t.start_adventure(name, background));
+        const msgFinal = await ctx.reply(t.start_adventure(name, background));
+        // Не добавляем msgFinal в msgIds, так как handleGameTurn удалит всё из stats.lastTurnMsgIds
+        // Но мы хотим оставить приветственное сообщение? Обычно пользователь хочет, чтобы история начиналась с нуля.
+        // Если добавить msgFinal в lastTurnMsgIds, оно тоже исчезнет. Оставим его для красоты начала.
+
         const startPrompt = lang === 'ru' ? 'Начни историю моего приключения, учитывая мое происхождение.' : 'Start the story of my adventure, considering my background.';
         await handleGameTurn(ctx, player, startPrompt);
 
