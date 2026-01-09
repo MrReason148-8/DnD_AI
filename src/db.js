@@ -1,33 +1,21 @@
-const mongoose = require('mongoose');
+const Datastore = require('nedb-promises');
+const path = require('path');
+const fs = require('fs');
 
-const playerSchema = new mongoose.Schema({
-  chatId: { type: Number, required: true, unique: true },
-  name: String,
-  age: Number,
-  history: [
-    {
-      role: { type: String, enum: ['system', 'user', 'assistant'] },
-      content: String
-    }
-  ],
-  stats: {
-    hp: { type: Number, default: 100 },
-    xp: { type: Number, default: 0 },
-    level: { type: Number, default: 1 }
-  },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const Player = mongoose.model('Player', playerSchema);
-
-async function connectDB(uri) {
-  try {
-    await mongoose.connect(uri);
-    console.log('✅ Connected to MongoDB');
-  } catch (err) {
-    console.error('❌ MongoDB connection error:', err);
-    process.exit(1);
-  }
+// Создаем папку data, если её нет
+const dataDir = path.join(__dirname, '../data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir);
 }
 
-module.exports = { connectDB, Player };
+const playersDB = Datastore.create({
+  filename: path.join(dataDir, 'players.db'),
+  autoload: true
+});
+
+const sessionsDB = Datastore.create({
+  filename: path.join(dataDir, 'sessions.db'),
+  autoload: true
+});
+
+module.exports = { playersDB, sessionsDB };

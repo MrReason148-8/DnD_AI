@@ -1,10 +1,10 @@
 const OpenAI = require('openai');
 
 class DeepSeekAI {
-    constructor(apiKey, baseURL) {
+    constructor(apiKey) {
         this.openai = new OpenAI({
             apiKey: apiKey,
-            baseURL: baseURL
+            baseURL: 'https://api.deepseek.com'
         });
     }
 

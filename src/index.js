@@ -1,10 +1,23 @@
 require('dotenv').config();
 const { Telegraf, Scenes, session, Markup } = require('telegraf');
-const { connectDB, Player } = require('./db');
+const { playersDB, sessionsDB } = require('./db');
 const DeepSeekAI = require('./ai');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const ai = new DeepSeekAI(process.env.DEEPSEEK_API_KEY, process.env.DEEPSEEK_BASE_URL);
+const ai = new DeepSeekAI(process.env.DEEPSEEK_API_KEY);
+
+// --- Middleware для персистентных сессий через NeDB ---
+const localSession = async (ctx, next) => {
+    const key = ctx.from ? `${ctx.from.id}:${ctx.chat.id}` : null;
+    if (!key) return next();
+
+    let sessionData = await sessionsDB.findOne({ key });
+    ctx.session = sessionData ? sessionData.data : {};
+
+    await next();
+
+    await sessionsDB.update({ key }, { key, data: ctx.session }, { upsert: true });
+};
 
 // --- Сцены ---
 
@@ -31,16 +44,17 @@ const registrationWizard = new Scenes.WizardScene(
         const chatId = ctx.from.id;
         const name = ctx.scene.state.name;
 
-        // Сохраняем игрока в БД
-        let player = await Player.findOne({ chatId });
+        // Сохраняем игрока в локальную БД
+        let player = await playersDB.findOne({ chatId });
         if (!player) {
-            player = new Player({ chatId, name, age });
+            player = { chatId, name, age, history: [], stats: { hp: 100, xp: 0, level: 1 } };
+            await playersDB.insert(player);
         } else {
             player.name = name;
             player.age = age;
             player.history = []; // Сбрасываем историю при новой регистрации
+            await playersDB.update({ chatId }, player);
         }
-        await player.save();
 
         await ctx.reply(`Персонаж ${name} (${age} лет) готов к приключениям! Начинаем историю...`);
 
@@ -53,8 +67,8 @@ const registrationWizard = new Scenes.WizardScene(
 
 const stage = new Scenes.Stage([registrationWizard]);
 
-// --- Middleware ---
-bot.use(session());
+// --- Применяем Middleware ---
+bot.use(localSession); // Наша кастомная сессия через NeDB
 bot.use(stage.middleware());
 
 // --- Функции игры ---
@@ -66,18 +80,17 @@ async function handleGameTurn(ctx, player, userText) {
         const aiResponse = await ai.generateResponse(player, userText);
         const actions = ai.parseActions(aiResponse);
 
-        // Удаляем технические строки ACTION из текста для пользователя
         const cleanText = aiResponse.replace(/ACTION\d:.*?\n?/g, '').trim();
 
-        // Обновляем историю в БД
+        // Обновляем историю
         player.history.push({ role: 'user', content: userText });
         player.history.push({ role: 'assistant', content: aiResponse });
 
-        // Ограничиваем историю (например, последние 20 сообщений)
         if (player.history.length > 20) {
             player.history = player.history.slice(-20);
         }
-        await player.save();
+
+        await playersDB.update({ chatId: player.chatId }, player);
 
         const keyboard = actions.length > 0
             ? Markup.inlineKeyboard(actions.map(a => [Markup.button.callback(a.text, a.id)]))
@@ -89,7 +102,7 @@ async function handleGameTurn(ctx, player, userText) {
             await ctx.reply(cleanText);
         }
     } catch (err) {
-        console.error(err);
+        console.error('AI Game Turn Error:', err);
         await ctx.reply('Ой, Гейм-мастер призадумался... Попробуй еще раз чуть позже.');
     }
 }
@@ -102,14 +115,12 @@ bot.command('start', (ctx) => {
 
 bot.on('callback_query', async (ctx) => {
     const chatId = ctx.from.id;
-    const player = await Player.findOne({ chatId });
+    const player = await playersDB.findOne({ chatId });
 
     if (!player) {
         return ctx.reply('Похоже, ты еще не зарегистрирован. Напиши /start');
     }
 
-    // Находим текст кнопки, которую нажал игрок
-    // В реальном приложении лучше искать по ID действия, но для простоты возьмем текст из текущего сообщения
     const actionText = ctx.callbackQuery.message.reply_markup.inline_keyboard
         .flat()
         .find(b => b.callback_data === ctx.callbackQuery.data)?.text;
@@ -121,13 +132,9 @@ bot.on('callback_query', async (ctx) => {
 });
 
 // Запуск
-async function init() {
-    await connectDB(process.env.MONGODB_URI);
-    bot.launch();
-    console.log('🤖 D&D Bot is running...');
-}
+bot.launch();
+console.log('🤖 D&D Bot (NeDB Mode) is running...');
 
-init();
 
 // Graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
