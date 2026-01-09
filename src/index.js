@@ -111,8 +111,9 @@ async function handleGameTurn(ctx, player, userText) {
         const actions = ai.parseActions(aiResponse);
         const changes = ai.parseChanges(aiResponse);
 
-        // Очищаем текст от служебных тегов
+        // Очищаем текст от служебных тегов (все, что начинается с --- или ACTION/CHANGES)
         const cleanText = aiResponse
+            .split('---')[0] // Берем только текст до разделителя, если он есть
             .replace(/ACTION\d:.*?\n?/g, '')
             .replace(/CHANGES:.*?\n?/g, '')
             .trim();
@@ -150,9 +151,13 @@ async function handleGameTurn(ctx, player, userText) {
 
         await playersDB.update({ chatId: player.chatId }, player);
 
-        const keyboard = actions.length > 0
-            ? Markup.inlineKeyboard(actions.map(a => [Markup.button.callback(a.text, a.id)]))
-            : null;
+        // Собираем кнопки действий
+        const buttons = actions.map(a => [Markup.button.callback(a.text, a.id)]);
+
+        // Всегда добавляем кнопку удаления игры в конец
+        buttons.push([Markup.button.callback('❌ Удалить игру', 'delete_game')]);
+
+        const keyboard = Markup.inlineKeyboard(buttons);
 
         const finalMessage = statusMsg ? `${cleanText}\n\n*${statusMsg.trim()}*` : cleanText;
 
@@ -196,6 +201,13 @@ bot.on('callback_query', async (ctx) => {
         return ctx.reply('Похоже, ты еще не зарегистрирован. Напиши /start');
     }
 
+    if (ctx.callbackQuery.data === 'delete_game') {
+        await playersDB.remove({ chatId }, { multi: false });
+        await sessionsDB.remove({ key: `${ctx.from.id}:${ctx.chat.id}` }, { multi: false });
+        await ctx.answerCbQuery('Игра удалена');
+        return ctx.reply('Твоя история стерта. Чтобы начать заново, напиши /start');
+    }
+
     const actionText = ctx.callbackQuery.message.reply_markup.inline_keyboard
         .flat()
         .find(b => b.callback_data === ctx.callbackQuery.data)?.text;
@@ -204,6 +216,13 @@ bot.on('callback_query', async (ctx) => {
         await ctx.answerCbQuery();
         await handleGameTurn(ctx, player, `Игрок выбрал: ${actionText}`);
     }
+});
+
+// Обработчик команды удаления
+bot.command('delete', async (ctx) => {
+    await playersDB.remove({ chatId: ctx.from.id }, { multi: false });
+    await sessionsDB.remove({ key: `${ctx.from.id}:${ctx.chat.id}` }, { multi: false });
+    await ctx.reply('Игра полностью удалена. Напиши /start для новой регистрации.');
 });
 
 // Запуск
