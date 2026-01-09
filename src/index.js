@@ -169,7 +169,7 @@ async function handleGameTurn(ctx, player, userText) {
         const buttons = actions.map(a => [Markup.button.callback(a.text, a.id)]);
 
         // Всегда добавляем кнопку удаления игры в конец
-        buttons.push([Markup.button.callback('❌ Удалить игру', 'delete_game')]);
+        buttons.push([Markup.button.callback('🧹 Стереть весь прогресс игры', 'delete_game')]);
 
         const keyboard = Markup.inlineKeyboard(buttons);
 
@@ -219,8 +219,8 @@ bot.on('callback_query', async (ctx) => {
     if (ctx.callbackQuery.data === 'delete_game') {
         await playersDB.remove({ chatId }, { multi: false });
         await sessionsDB.remove({ key: `${ctx.from.id}:${ctx.chat.id}` }, { multi: false });
-        await ctx.answerCbQuery('Игра удалена');
-        return ctx.reply('Твоя история стерта. Чтобы начать заново, напиши /start');
+        await ctx.answerCbQuery('Прогресс стерт');
+        return ctx.reply('Твоя история стерта. Чтобы начать новое приключение, напиши /start');
     }
 
     const actionText = ctx.callbackQuery.message.reply_markup.inline_keyboard
@@ -245,7 +245,7 @@ bot.on('callback_query', async (ctx) => {
 bot.command('delete', async (ctx) => {
     await playersDB.remove({ chatId: ctx.from.id }, { multi: false });
     await sessionsDB.remove({ key: `${ctx.from.id}:${ctx.chat.id}` }, { multi: false });
-    await ctx.reply('Игра полностью удалена. Напиши /start для новой регистрации.');
+    await ctx.reply('Весь прогресс игры полностью удален. Напиши /start для новой регистрации.');
 });
 
 // Запуск
