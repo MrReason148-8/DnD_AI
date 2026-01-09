@@ -56,25 +56,15 @@ const registrationWizard = new Scenes.WizardScene(
         ctx.scene.state.gender = ctx.callbackQuery.data === 'gender_male' ? 'мужской' : 'женский';
         await ctx.answerCbQuery();
 
-        await ctx.reply('Выбери свой класс:', Markup.inlineKeyboard([
-            [Markup.button.callback('Воин 🛡️', 'class_warrior')],
-            [Markup.button.callback('Маг 🧙', 'class_mage')],
-            [Markup.button.callback('Вор 🗡️', 'class_rogue')]
-        ]));
+        await ctx.reply('Кто твой герой? Опиши его происхождение и способности (например: "Рыцарь-отступник, умеющий немного врачевать" или "Дочь лесного разбойника, мечтающая о магии").');
         return ctx.wizard.next();
     },
     async (ctx) => {
-        if (!ctx.callbackQuery || !ctx.callbackQuery.data.startsWith('class_')) {
-            return ctx.reply('Пожалуйста, выбери класс, нажав на кнопку.');
+        if (!ctx.message || !ctx.message.text) {
+            return ctx.reply('Пожалуйста, опиши своего героя текстом.');
         }
 
-        const classMap = {
-            class_warrior: 'Воин',
-            class_mage: 'Маг',
-            class_rogue: 'Вор'
-        };
-
-        const selectedClass = classMap[ctx.callbackQuery.data];
+        const background = ctx.message.text;
         const { name, age, gender } = ctx.scene.state;
         const chatId = ctx.from.id;
 
@@ -84,8 +74,9 @@ const registrationWizard = new Scenes.WizardScene(
             hp: 100,
             xp: 0,
             level: 1,
-            class: selectedClass,
+            background: background,
             gender: gender,
+            spells: [],
             inventory: []
         };
 
@@ -100,10 +91,9 @@ const registrationWizard = new Scenes.WizardScene(
             await playersDB.update({ chatId }, player);
         }
 
-        await ctx.answerCbQuery();
-        await ctx.reply(`Персонаж ${name} (${gender}, ${selectedClass}, ${age} лет) готов! Начинаем историю...`);
+        await ctx.reply(`Твоя история начинается, ${name}. Ты — ${background}. Удачи в приключениях!`);
 
-        await handleGameTurn(ctx, player, 'Начни историю моего приключения в темном фэнтези мире.');
+        await handleGameTurn(ctx, player, 'Начни историю моего приключения, учитывая мое происхождение.');
 
         return ctx.scene.leave();
     }
@@ -153,6 +143,11 @@ async function handleGameTurn(ctx, player, userText) {
                 player.stats.inventory.push(changes.get);
                 statusMsg += `\n🎒 Получено: ${changes.get}`;
             }
+            if (changes.learn) {
+                if (!player.stats.spells) player.stats.spells = [];
+                player.stats.spells.push(changes.learn);
+                statusMsg += `\n✨ Изучено заклинание: ${changes.learn}`;
+            }
         }
 
         // Обновляем историю
@@ -193,12 +188,12 @@ bot.command('stats', async (ctx) => {
     if (!player) return ctx.reply('Сначала зарегистрируйся: /start');
 
     const { stats, name } = player;
-    const msg = `👤 **Профиль героя: ${name}**\n\n` +
-        `🎭 Пол: ${stats.gender}\n` +
-        `⚔️ Класс: ${stats.class}\n` +
-        `❤️ HP: ${stats.hp}/100\n` +
-        `⭐ Уровень: ${stats.level}\n` +
-        `📈 Опыт: ${stats.xp}\n` +
+    const spellsStr = stats.spells && stats.spells.length > 0 ? stats.spells.join(', ') : 'Нет';
+    const msg = `👤 **Герой: ${name}**\n` +
+        `🧬 Пол: ${stats.gender} (${player.age} лет)\n` +
+        `📜 Происхождение: ${stats.background}\n\n` +
+        `❤️ HP: ${stats.hp}/100 | ⭐ Ур: ${stats.level} | 📈 Опыт: ${stats.xp}\n` +
+        `✨ Заклинания: ${spellsStr}\n` +
         `🎒 Инвентарь: ${stats.inventory.length > 0 ? stats.inventory.join(', ') : 'Пусто'}`;
 
     await ctx.replyWithMarkdown(msg);
