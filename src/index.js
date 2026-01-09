@@ -144,22 +144,64 @@ bot.use(stage.middleware());
 // --- Функции игры ---
 
 async function handleGameTurn(ctx, player, userText) {
-    await ctx.sendChatAction('typing');
     const lang = player.stats.language || 'ru';
     const t = i18n[lang];
+
+    // --- Чистка чата ---
+    try {
+        // Удаляем сообщение игрока
+        if (ctx.message) await ctx.deleteMessage(ctx.message.message_id);
+        else if (ctx.callbackQuery) await ctx.deleteMessage(ctx.callbackQuery.message.message_id);
+
+        // Удаляем ВСЕ сообщения предыдущего хода
+        if (player.stats.lastTurnMsgIds && player.stats.lastTurnMsgIds.length > 0) {
+            for (const msgId of player.stats.lastTurnMsgIds) {
+                await ctx.telegram.deleteMessage(ctx.chat.id, msgId).catch(() => { });
+            }
+        }
+    } catch (e) { }
+
+    await ctx.sendChatAction('typing');
 
     try {
         const aiResponse = await ai.generateResponse(player, userText);
         const actions = ai.parseActions(aiResponse);
         const changes = ai.parseChanges(aiResponse);
 
-        const cleanText = aiResponse
-            .split('<TECH>')[0] // Отрезаем всё, что после тега <TECH>
-            .replace(/<TECH>|<\/TECH>/g, '') // На всякий случай убираем сами теги
-            .replace(/ACTION\d:.*?\n?/g, '')
-            .replace(/CHANGES:.*?\n?/g, '')
+        // Извлекаем блок <DICE>
+        const diceMatch = aiResponse.match(/<DICE>(.*?)<\/DICE>/s);
+        const diceContent = diceMatch ? diceMatch[1].trim() : null;
+
+        // Очищаем основной текст от тегов
+        let mainText = aiResponse
+            .split('<TECH>')[0]
+            .replace(/<DICE>.*?<\/DICE>/gs, '')
+            .replace(/<TECH>|<\/TECH>/g, '')
             .trim();
 
+        // Разбиваем на абзацы
+        const paragraphs = mainText.split('\n\n').filter(p => p.trim().length > 0);
+        const sentMsgIds = [];
+
+        // 1. Отправляем абзацы по очереди
+        for (let i = 0; i < paragraphs.length; i++) {
+            if (i > 0) {
+                await ctx.sendChatAction('typing');
+                await new Promise(r => setTimeout(r, 1500)); // Задержка между абзацами
+            }
+            const msg = await ctx.replyWithMarkdown(paragraphs[i].trim());
+            sentMsgIds.push(msg.message_id);
+        }
+
+        // 2. Отправляем блок кубика, если он есть
+        if (diceContent) {
+            await ctx.sendChatAction('typing');
+            await new Promise(r => setTimeout(r, 1000));
+            const diceMsg = await ctx.replyWithMarkdown(`${t.dice_header}\n\n_${diceContent}_`);
+            sentMsgIds.push(diceMsg.message_id);
+        }
+
+        // 3. Обрабатываем изменения и статус
         let statusMsg = '';
         if (changes) {
             if (changes.hp) {
@@ -191,23 +233,22 @@ async function handleGameTurn(ctx, player, userText) {
             }
         }
 
+        // 4. Отправляем финальное сообщение со статусом и кнопками
+        const buttons = actions.map(a => [Markup.button.callback(a.text, a.id)]);
+        buttons.push([Markup.button.callback(t.delete_btn, 'delete_game')]);
+
+        const statusText = statusMsg ? `\n\n*${statusMsg.trim()}*` : '';
+        const finalMsg = await ctx.replyWithMarkdown(statusText || '...', Markup.inlineKeyboard(buttons));
+        sentMsgIds.push(finalMsg.message_id);
+
+        // Сохранение состояния
         player.history.push({ role: 'user', content: userText });
         player.history.push({ role: 'assistant', content: aiResponse });
         if (player.history.length > 20) player.history = player.history.slice(-20);
 
+        player.stats.lastTurnMsgIds = sentMsgIds;
         await playersDB.update({ chatId: player.chatId }, player);
 
-        const buttons = actions.map(a => [Markup.button.callback(a.text, a.id)]);
-        buttons.push([Markup.button.callback(t.delete_btn, 'delete_game')]);
-
-        const keyboard = Markup.inlineKeyboard(buttons);
-        const finalMessage = statusMsg ? `${cleanText}\n\n*${statusMsg.trim()}*` : cleanText;
-
-        if (keyboard) {
-            await ctx.replyWithMarkdown(finalMessage, keyboard);
-        } else {
-            await ctx.replyWithMarkdown(finalMessage);
-        }
     } catch (err) {
         console.error('AI Game Turn Error:', err);
         const errMsg = lang === 'ru' ? 'Ой, Гейм-мастер призадумался... Попробуй еще раз чуть позже.' : 'Oops, the Game Master is thinking too hard... Try again later.';
