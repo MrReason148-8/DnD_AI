@@ -154,7 +154,8 @@ async function handleGameTurn(ctx, player, userText) {
         const changes = ai.parseChanges(aiResponse);
 
         const cleanText = aiResponse
-            .split('---')[0]
+            .split('<TECH>')[0] // Отрезаем всё, что после тега <TECH>
+            .replace(/<TECH>|<\/TECH>/g, '') // На всякий случай убираем сами теги
             .replace(/ACTION\d:.*?\n?/g, '')
             .replace(/CHANGES:.*?\n?/g, '')
             .trim();
