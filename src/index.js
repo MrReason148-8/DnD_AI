@@ -148,6 +148,14 @@ async function handleGameTurn(ctx, player, userText) {
                 player.stats.spells.push(changes.learn);
                 statusMsg += `\n✨ Изучено заклинание: ${changes.learn}`;
             }
+            if (changes.note) {
+                if (!player.stats.notes) player.stats.notes = [];
+                player.stats.notes.push(changes.note);
+                // Ограничиваем количество записей, чтобы промпт не раздувался
+                if (player.stats.notes.length > 30) {
+                    player.stats.notes.shift();
+                }
+            }
         }
 
         // Обновляем историю
