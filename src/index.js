@@ -206,7 +206,7 @@ async function handleGameTurn(ctx, player, userText) {
         for (let i = 0; i < paragraphs.length; i++) {
             if (i > 0) {
                 await ctx.sendChatAction('typing');
-                await sleep(1, 4); // Случайная задержка 1-4 сек перед следующим абзацем
+                await sleep(8, 10); // Случайная задержка 8-10 сек перед следующим абзацем
             }
             const msg = await ctx.replyWithMarkdown(paragraphs[i].trim());
             sentMsgIds.push(msg.message_id);
