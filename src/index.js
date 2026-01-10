@@ -280,6 +280,16 @@ async function handleGameTurn(ctx, player, userText) {
 
 // --- Обработчики ---
 
+const START_TIME = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+
+bot.command('version', async (ctx) => {
+    const lang = ctx.from.language_code === 'ru' ? 'ru' : 'en';
+    const msg = lang === 'ru'
+        ? `✅ **Бот работает штатно**\n🕒 Последний запуск: ${START_TIME}\n📦 Авто-обновление активно.`
+        : `✅ **Bot is running normally**\n🕒 Last start: ${START_TIME}\n📦 Auto-update is active.`;
+    await ctx.replyWithMarkdown(msg);
+});
+
 bot.command('stats', async (ctx) => {
     const player = await playersDB.findOne({ chatId: ctx.from.id });
     if (!player) return ctx.reply('Please register first: /start');
