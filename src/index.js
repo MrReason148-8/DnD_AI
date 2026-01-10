@@ -163,17 +163,12 @@ async function handleGameTurn(ctx, player, userText) {
     const lang = player.stats.language || 'ru';
     const t = i18n[lang];
 
-    // --- Чистка чата ---
+    // --- Чистка чата (только кнопки) ---
     try {
-        // Удаляем сообщение игрока
-        if (ctx.message) await ctx.deleteMessage(ctx.message.message_id);
-        else if (ctx.callbackQuery) await ctx.deleteMessage(ctx.callbackQuery.message.message_id);
-
-        // Удаляем ВСЕ сообщения предыдущего хода
+        // Убираем кнопки из ПОСЛЕДНЕГО сообщения предыдущего хода
         if (player.stats.lastTurnMsgIds && player.stats.lastTurnMsgIds.length > 0) {
-            for (const msgId of player.stats.lastTurnMsgIds) {
-                await ctx.telegram.deleteMessage(ctx.chat.id, msgId).catch(() => { });
-            }
+            const lastMsgId = player.stats.lastTurnMsgIds[player.stats.lastTurnMsgIds.length - 1];
+            await ctx.telegram.editMessageReplyMarkup(ctx.chat.id, lastMsgId, null).catch(() => { });
         }
     } catch (e) { }
 
